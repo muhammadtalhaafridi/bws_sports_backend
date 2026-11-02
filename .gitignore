@@ -1,0 +1,7 @@
+node_modules
+.env
+src/generated
+uploads/products/*
+uploads/users/*
+uploads/seed/*
+!uploads/**/.gitkeep
