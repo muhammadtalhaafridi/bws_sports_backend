@@ -22,12 +22,21 @@ export async function listProducts(req: Request, res: Response) {
   const query = parseQuery(productQuerySchema, req);
   const { page, limit, skip } = pagination(query);
 
+  // Every word must appear somewhere (name, description or category), in any order and any case,
+  // so "kashmir bat" finds "Classic Kashmir Willow Bat".
+  const words = query.search?.split(/\s+/).filter(Boolean) ?? [];
+
   const where: Prisma.ProductWhereInput = {
-    ...(query.search && {
-      OR: [
-        { name: { contains: query.search, mode: "insensitive" } },
-        { description: { contains: query.search, mode: "insensitive" } },
-      ],
+    ...(words.length > 0 && {
+      AND: words.map(
+        (word): Prisma.ProductWhereInput => ({
+          OR: [
+            { name: { contains: word, mode: "insensitive" } },
+            { description: { contains: word, mode: "insensitive" } },
+            { category: { name: { contains: word, mode: "insensitive" } } },
+          ],
+        }),
+      ),
     }),
     ...(query.category && { categoryId: query.category }),
     ...(query.featured !== undefined && { featured: query.featured }),

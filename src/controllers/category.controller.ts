@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import type { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { conflict } from "../utils/HttpError";
-import { parseId } from "../utils/helpers";
+import { parseId, removeUpload, uploadPath } from "../utils/helpers";
 import type { categorySchema } from "../validators";
 
 export async function listCategories(_req: Request, res: Response) {
@@ -25,16 +25,35 @@ async function ensureUniqueName(name: string, exceptId?: number) {
 
 export async function createCategory(req: Request, res: Response) {
   const { name } = req.body as z.output<typeof categorySchema>;
-  await ensureUniqueName(name);
-  const category = await prisma.category.create({ data: { name } });
+  const image = uploadPath(req.file);
+  try {
+    await ensureUniqueName(name);
+  } catch (error) {
+    await removeUpload(image);
+    throw error;
+  }
+  const category = await prisma.category.create({ data: { name, image } });
   res.status(201).json({ category });
 }
 
 export async function updateCategory(req: Request, res: Response) {
-  const { name } = req.body as z.output<typeof categorySchema>;
+  const { name, removeImage } = req.body as z.output<typeof categorySchema>;
   const id = parseId(req.params.id);
-  await ensureUniqueName(name, id);
-  const category = await prisma.category.update({ where: { id }, data: { name } });
+  const image = uploadPath(req.file);
+  try {
+    await ensureUniqueName(name, id);
+  } catch (error) {
+    await removeUpload(image);
+    throw error;
+  }
+
+  const current = await prisma.category.findUniqueOrThrow({ where: { id } });
+  const category = await prisma.category.update({
+    where: { id },
+    data: { name, ...(image ? { image } : removeImage && { image: null }) },
+  });
+  if (image || removeImage) await removeUpload(current.image);
+
   res.json({ category });
 }
 
@@ -44,6 +63,7 @@ export async function deleteCategory(req: Request, res: Response) {
   if (products > 0) {
     throw conflict(`This category has ${products} product(s). Move or delete them first.`);
   }
-  await prisma.category.delete({ where: { id } });
+  const category = await prisma.category.delete({ where: { id } });
+  await removeUpload(category.image);
   res.json({ message: "Category deleted" });
 }

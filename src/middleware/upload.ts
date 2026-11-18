@@ -6,7 +6,7 @@ import { UPLOADS_DIR } from "../utils/helpers";
 
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-function imageUpload(folder: "products" | "users") {
+function imageUpload(folder: "products" | "users" | "categories") {
   return multer({
     storage: multer.diskStorage({
       destination: path.join(UPLOADS_DIR, folder),
@@ -25,3 +25,4 @@ function imageUpload(folder: "products" | "users") {
 
 export const uploadProductImage = imageUpload("products");
 export const uploadUserImage = imageUpload("users");
+export const uploadCategoryImage = imageUpload("categories");

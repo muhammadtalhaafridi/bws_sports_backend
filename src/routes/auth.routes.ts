@@ -10,6 +10,7 @@ import {
   registerSchema,
   resetPasswordSchema,
   updateProfileSchema,
+  verifyResetCodeSchema,
 } from "../validators";
 
 const router = Router();
@@ -64,37 +65,64 @@ router.post("/login", validateBody(loginSchema), auth.login);
  * /auth/forgot-password:
  *   post:
  *     tags: [Auth]
- *     summary: Email a password reset link
+ *     summary: Email a 6-digit verification code for resetting the password
+ *     description: The code is valid for 15 minutes. A new code can be requested once a minute.
  *     requestBody:
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [email]
  *             properties:
  *               email: { type: string }
  *               from: { type: string, enum: [website, dashboard] }
  *     responses:
- *       200: { description: Reset link sent if the account exists }
+ *       200: { description: Code sent if the account exists }
+ *       503: { description: The email could not be sent }
  */
 router.post("/forgot-password", validateBody(forgotPasswordSchema), auth.forgotPassword);
+
+/**
+ * @openapi
+ * /auth/verify-reset-code:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Check a verification code before choosing a new password
+ *     description: Five wrong attempts cancel the code.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, code]
+ *             properties:
+ *               email: { type: string }
+ *               code: { type: string, example: "123456" }
+ *     responses:
+ *       200: { description: Code is valid }
+ *       400: { description: Wrong, expired or used code }
+ */
+router.post("/verify-reset-code", validateBody(verifyResetCodeSchema), auth.verifyResetCode);
 
 /**
  * @openapi
  * /auth/reset-password:
  *   post:
  *     tags: [Auth]
- *     summary: Set a new password using the emailed token
+ *     summary: Set a new password using the emailed verification code
  *     requestBody:
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [email, code, password]
  *             properties:
- *               token: { type: string }
+ *               email: { type: string }
+ *               code: { type: string, example: "123456" }
  *               password: { type: string }
  *     responses:
  *       200: { description: Password updated }
- *       400: { description: Invalid or expired token }
+ *       400: { description: Wrong, expired or used code }
  */
 router.post("/reset-password", validateBody(resetPasswordSchema), auth.resetPassword);
 

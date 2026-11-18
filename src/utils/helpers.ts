@@ -29,7 +29,7 @@ export function uploadPath(file: Express.Multer.File | undefined): string | unde
 
 /** Removes a previously uploaded file. Seed images are kept. */
 export async function removeUpload(publicPath: string | null | undefined) {
-  if (!publicPath || !/^\/uploads\/(products|users)\//.test(publicPath)) return;
+  if (!publicPath || !/^\/uploads\/(products|users|categories)\//.test(publicPath)) return;
   const file = path.join(path.dirname(UPLOADS_DIR), publicPath);
   await fs.unlink(file).catch(() => undefined);
 }

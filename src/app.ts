@@ -3,6 +3,7 @@ import express from "express";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import { Prisma } from "./generated/prisma/client";
+import { verifyMailer } from "./lib/mailer";
 import { prisma } from "./lib/prisma";
 import { swaggerSpec } from "./lib/swagger";
 import { errorHandler, notFoundHandler } from "./middleware/error";
@@ -37,6 +38,7 @@ app.use(errorHandler);
 const server = app.listen(env.port, () => {
   console.log(`BWS Sports API running on http://localhost:${env.port}`);
   console.log(`API docs: http://localhost:${env.port}/api-docs`);
+  void verifyMailer();
 });
 
 async function shutdown() {

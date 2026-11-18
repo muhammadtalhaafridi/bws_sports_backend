@@ -39,16 +39,20 @@ export const loginSchema = z.object({
   password: z.string({ error: "Password is required" }).min(1, "Password is required"),
 });
 
+const resetCode = z
+  .string({ error: "Verification code is required" })
+  .trim()
+  .regex(/^\d{6}$/, "Enter the 6-digit code from your email");
+
 export const forgotPasswordSchema = z.object({
   email,
-  /** Which app should open the reset link. */
+  /** Which app the link in the email should open. */
   from: z.enum(["website", "dashboard"]).optional().default("website"),
 });
 
-export const resetPasswordSchema = z.object({
-  token: z.string().min(10, "Invalid reset link"),
-  password,
-});
+export const verifyResetCodeSchema = z.object({ email, code: resetCode });
+
+export const resetPasswordSchema = z.object({ email, code: resetCode, password });
 
 export const updateProfileSchema = z.object({
   name: trimmed("Name", 2, 100),
@@ -62,7 +66,11 @@ export const changePasswordSchema = z.object({
 });
 
 // ---------- Categories ----------
-export const categorySchema = z.object({ name: trimmed("Name", 2, 50) });
+export const categorySchema = z.object({
+  name: trimmed("Name", 2, 50),
+  /** Set on update to clear the current image without uploading a new one. */
+  removeImage: booleanish.optional().default(false),
+});
 
 // ---------- Products ----------
 export const productSchema = z.object({
