@@ -1,8 +1,11 @@
 import type { Request, Response } from "express";
+import type Stripe from "stripe";
 import type { z } from "zod";
 import { Prisma } from "../generated/prisma/client";
 import type { OrderStatus } from "../generated/prisma/enums";
+import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
+import { stripe } from "../lib/stripe";
 import { parseQuery } from "../middleware/validate";
 import { badRequest, conflict, forbidden, notFound } from "../utils/HttpError";
 import { pageMeta, pagination, parseId } from "../utils/helpers";
@@ -17,7 +20,9 @@ const orderDetails = {
 } satisfies Prisma.OrderInclude;
 
 export async function createOrder(req: Request, res: Response) {
-  const { items, phone, address, description } = req.body as z.output<typeof createOrderSchema>;
+  const { items, phone, address, description, paymentMethod } = req.body as z.output<typeof createOrderSchema>;
+  const byCard = paymentMethod === "CARD";
+  if (byCard && !stripe) throw badRequest("Card payment is not available right now");
 
   // Combine repeated products into one line.
   const quantities = new Map<number, number>();
@@ -58,13 +63,80 @@ export async function createOrder(req: Request, res: Response) {
         phone,
         address,
         description,
+        paymentMethod: byCard ? "Card (Stripe)" : "Cash on delivery",
         items: { create: lines },
       },
       include: orderDetails,
     });
   });
 
-  res.status(201).json({ order });
+  if (!byCard) {
+    res.status(201).json({ order });
+    return;
+  }
+
+  // Send the customer to Stripe's secure card page. If Stripe fails, undo the order so stock comes back.
+  try {
+    const session = await stripe!.checkout.sessions.create({
+      mode: "payment",
+      customer_email: order.user.email,
+      client_reference_id: String(order.id),
+      metadata: { orderId: String(order.id) },
+      line_items: order.items.map((item) => ({
+        quantity: item.quantity,
+        price_data: {
+          currency: "pkr",
+          unit_amount: Math.round(Number(item.price) * 100),
+          product_data: { name: item.product.name },
+        },
+      })),
+      success_url: `${env.clientUrl}/orders/${order.id}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.clientUrl}/checkout?cancelled=${order.id}`,
+    });
+    await prisma.order.update({ where: { id: order.id }, data: { stripeSessionId: session.id } });
+    res.status(201).json({ order, checkoutUrl: session.url });
+  } catch (error) {
+    await changeStatus(order.id, "CANCELLED");
+    console.error("[stripe] could not start checkout:", error);
+    throw badRequest("Could not start card payment. Please try again or choose cash on delivery.");
+  }
+}
+
+/** Called when Stripe sends the customer back. Checks the payment with Stripe and saves the card summary. */
+export async function confirmPayment(req: Request, res: Response) {
+  const id = parseId(req.params.id);
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) throw notFound("Order not found");
+  if (order.userId !== req.user!.id) throw forbidden();
+  if (order.paymentStatus === "PAID" || !order.stripeSessionId || !stripe) {
+    res.json({ order: await prisma.order.findUniqueOrThrow({ where: { id }, include: orderDetails }) });
+    return;
+  }
+
+  const session = await stripe.checkout.sessions.retrieve(order.stripeSessionId, {
+    expand: ["payment_intent.payment_method"],
+  });
+  if (session.payment_status !== "paid") throw badRequest("Payment has not been completed");
+
+  const intent = session.payment_intent as Stripe.PaymentIntent | null;
+  const method = intent?.payment_method as Stripe.PaymentMethod | null | undefined;
+  const card = method?.card;
+
+  const updated = await prisma.order.update({
+    where: { id },
+    data: {
+      paymentStatus: "PAID",
+      paidAt: new Date(),
+      stripePaymentId: intent?.id,
+      cardBrand: card?.brand,
+      cardLast4: card?.last4,
+      cardExpMonth: card?.exp_month,
+      cardExpYear: card?.exp_year,
+      cardholderName: method?.billing_details.name ?? session.customer_details?.name ?? null,
+    },
+    include: orderDetails,
+  });
+  res.json({ order: updated });
 }
 
 export async function myOrders(req: Request, res: Response) {
@@ -107,6 +179,7 @@ export async function cancelMyOrder(req: Request, res: Response) {
   if (!order) throw notFound("Order not found");
   if (order.userId !== req.user!.id) throw forbidden();
   if (order.status !== "PENDING") throw badRequest("Only pending orders can be cancelled");
+  if (order.paymentStatus === "PAID") throw badRequest("Paid orders cannot be cancelled online. Please contact us.");
 
   res.json({ order: await changeStatus(id, "CANCELLED") });
 }

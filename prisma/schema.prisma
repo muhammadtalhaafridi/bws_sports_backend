@@ -81,6 +81,16 @@ model Order {
   address       String
   description   String?
   paymentMethod String      @default("Cash on delivery") @map("payment_method")
+  // Card payments go through Stripe Checkout. Only safe card details are kept (never the full number or CVC).
+  paymentStatus   String    @default("UNPAID") @map("payment_status") // UNPAID | PAID
+  stripeSessionId String?   @unique @map("stripe_session_id")
+  stripePaymentId String?   @map("stripe_payment_id")
+  cardBrand       String?   @map("card_brand")
+  cardLast4       String?   @map("card_last4")
+  cardExpMonth    Int?      @map("card_exp_month")
+  cardExpYear     Int?      @map("card_exp_year")
+  cardholderName  String?   @map("cardholder_name")
+  paidAt          DateTime? @map("paid_at")
   orderDate     DateTime    @default(now()) @map("order_date")
 
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)

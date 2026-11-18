@@ -26,6 +26,7 @@ router.use(requireAuth);
  *               phone: { type: string }
  *               address: { type: string }
  *               description: { type: string }
+ *               paymentMethod: { type: string, enum: [COD, CARD] }
  *     responses:
  *       201: { description: Order created }
  *       409: { description: Not enough stock }
@@ -54,6 +55,15 @@ router.use(requireAuth);
  *     parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
  *     responses:
  *       200: { description: Order with items }
+ * /orders/{id}/confirm-payment:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Check the Stripe card payment of your order and save the card summary
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: integer } }]
+ *     responses:
+ *       200: { description: Order marked as paid }
+ *       400: { description: Payment not completed }
  * /orders/{id}/cancel:
  *   patch:
  *     tags: [Orders]
@@ -79,6 +89,7 @@ router.post("/", validateBody(createOrderSchema), orders.createOrder);
 router.get("/my", orders.myOrders);
 router.get("/", requireAdmin, orders.listOrders);
 router.get("/:id", orders.getOrder);
+router.post("/:id/confirm-payment", orders.confirmPayment);
 router.patch("/:id/cancel", orders.cancelMyOrder);
 router.patch("/:id/status", requireAdmin, validateBody(orderStatusSchema), orders.updateOrderStatus);
 

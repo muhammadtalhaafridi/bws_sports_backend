@@ -30,6 +30,7 @@ export const env = {
   jwtSecret: required("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   clientUrl: siteUrl("CLIENT_URL", "http://localhost:5173"),
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   dashboardUrl: siteUrl("DASHBOARD_URL", "http://localhost:5174"),
   smtp: {
     // Accept the common SMTP_EMAIL/SMTP_PASSWORD names as well as the

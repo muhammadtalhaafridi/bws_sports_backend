@@ -112,6 +112,7 @@ export const createOrderSchema = z.object({
   phone,
   address: trimmed("Address", 5, 500),
   description: optionalText(1000),
+  paymentMethod: z.enum(["COD", "CARD"]).default("COD"),
 });
 
 export const orderStatusSchema = z.object({ status: z.enum(orderStatuses) });
